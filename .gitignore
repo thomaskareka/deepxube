@@ -29,3 +29,7 @@ valid.pkl
 *__pycache__*
 *figures.pptx
 notes.txt
+
+maps/
+results/
+scenarios/

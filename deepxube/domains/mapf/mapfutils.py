@@ -1,4 +1,4 @@
-from typing import List, Tuple, Optional
+from typing import Dict, List, Tuple, Optional
 import numpy as np
 from numpy.typing import NDArray
 
@@ -6,6 +6,14 @@ from dataclasses import dataclass
 from pathlib import Path
 
 WALKABLE_TILES = {"."}
+
+MOVE_DELTAS: Dict[int, Tuple[int, int]] = {
+    0: (-1, 0),
+    1: (1, 0),
+    2: (0, -1),
+    3: (0, 1),
+    4: (0, 0),
+}
 
 #utils for map environment
 #bucket map_file    width   height  start_x start_y goal_x  goal_y  optimal_len
@@ -92,3 +100,54 @@ def read_map_file(path: str | Path) -> Tuple[NDArray[np.bool], int, int]:
     
     return obstacles, width, height
 
+# prevent vertex and edge conflicts, iterates through until no swaps needed
+def resolve_conflicts(current: List[Tuple[int, int]],
+    proposed: List[Tuple[int, int]],
+) -> List[Tuple[int, int]]:
+    n = len(current)
+    proposed = list(proposed)
+
+    while True:
+        changed = False
+        blocked = set()
+        proposed_agents: Dict[Tuple[int, int], int] = {}
+        #vertex, ensure no two agents are on same cell
+        for i, target in enumerate(proposed):
+            a = proposed_agents.get(target)
+
+            if a is None:
+                proposed_agents[target] = i
+            else:
+                blocked.add(i)
+                blocked.add(a)
+        
+        #edge conflicts, ensure no swapping
+        agent_moves: Dict[Tuple[Tuple[int, int], Tuple[int, int]], int,] = {}
+
+        for i in range(n):
+            start = current[i]
+            end = proposed[i]
+            if start != end:
+                agent_moves[(start, end)] = i
+        
+        for i in range(n):
+            start = current[i]
+            end = proposed[i]
+
+            if start == end: continue
+
+            reverse_agent = agent_moves.get((end, start))
+
+            if reverse_agent is not None and reverse_agent != i:
+                blocked.add(i)
+                blocked.add(reverse_agent)
+        
+        if not blocked:
+            return proposed
+        
+        for i in blocked:
+            if proposed[i] != current[i]:
+                proposed[i] = current[i]
+                changed = True
+        
+        if not changed: return proposed

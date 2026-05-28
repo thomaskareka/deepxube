@@ -51,7 +51,7 @@ class SyncMAPFGridAction(Action):
         return hash(self.agent_actions)
 
     def __eq__(self, other):
-        if isinstance(other, SyncMAPFGrid):
+        if isinstance(other, SyncMAPFGridAction):
             return self.agent_actions == other.agent_actions
         return NotImplemented
 
@@ -77,7 +77,7 @@ class SyncMAPFGrid(
             self.dim: int = dim
             self.height: int = dim
             self.width: int = dim
-            self.obstacles: NDArray[np.bool] = np.zeros((self.height, self.width), dtype=bool)
+            self.obstacles: NDArray[np.bool_] = np.zeros((self.height, self.width), dtype=bool)
         else:
             self.obstacles, self.width, self.height = read_map_file(map_path)
             self.dim = max(self.height, self.width)

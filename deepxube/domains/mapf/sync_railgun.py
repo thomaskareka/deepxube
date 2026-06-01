@@ -184,8 +184,8 @@ class SyncMAPFRailgunPolicyInput(PolicyNNetIn[SyncMAPFGrid, SyncMAPFGridState, S
             (int(dx), int(dy)): int(action_id)
             for action_id, (dx, dy) in MOVE_DELTAS.items()
         }
-
-    def to_np(self, states, goals, actions):
+    #currently unused, can be expanded with proper experts like LaCAM
+    def to_np_supervised(self, states, goals, actions):
         features, coords = self.to_np_fn(states, goals)
 
         b = len(states)
@@ -201,6 +201,24 @@ class SyncMAPFRailgunPolicyInput(PolicyNNetIn[SyncMAPFGrid, SyncMAPFGridState, S
                 action_targets[bi, rx, ry] = int(expert_action.agent_actions[ai])
                 action_mask[bi, rx, ry] = 1.0
                 
+        return [features, coords, action_targets, action_mask]
+    
+    def to_np(self, states, goals, actions):
+        features, coords = self.to_np_fn(states, goals)
+
+        b = len(states)
+        h, w = self.domain.height, self.domain.width
+
+        action_targets = np.zeros((b, h, w), dtype=np.int64)
+        action_mask = np.zeros((b, h, w), dtype=np.float32)
+
+        for bi, (state, action) in enumerate(zip(states, actions)):
+            if len(action.agent_actions) != self.domain.num_agents:
+                raise ValueError(f"expected {self.domain.num_agents} actions, got {len(action.agent_actions)}")
+            
+            for ai, (rx, ry) in enumerate(zip(state.robot_xs, state.robot_ys)):
+                action_targets[bi, rx, ry] = int(action.agent_actions[ai])
+                action_mask[bi, rx, ry] = 1.0
         return [features, coords, action_targets, action_mask]
     
     def nnet_out_to_actions(self, nnet_out):

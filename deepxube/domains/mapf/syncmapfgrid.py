@@ -229,6 +229,40 @@ class SyncMAPFGrid(
             for row in range(num)
         ]
     
+    def _get_wait_action_id(self) -> int:
+        for action_id, delta in MOVE_DELTAS.items():
+            dx, dy = delta
+            if int(dx) == 0 and int(dy) == 0:
+                return int(action_id)
+        return 0
+
+    def _get_wait_actions(self) -> SyncMAPFGridAction:
+        wait_id = self._get_wait_action_id()
+        return SyncMAPFGridAction(tuple(wait_id for _ in range(self.num_agents)))
+    
+    def samp_edges(self, steps_gen):
+        if self.scenario_entries is not None:
+            raise ValueError("cannot use fixed scenarios for training")
+        
+        start_states = self.sample_start_states(len(steps_gen))
+
+        next_states, first_actions, _ = self.sample_next_state(start_states)
+
+        steps = np.asarray(steps_gen, dtype=np.int64)
+
+        wait_id = self._get_wait_action_id()
+        for i in np.where(steps == 0)[0]:
+            index = int(i)
+            next_states[index] = start_states[index]
+            first_actions[index] = wait_id
+        
+        reduced_steps = np.maximum(steps-1, 0).tolist()
+
+        states_goal, _, _ = self.random_walk(next_states, reduced_steps)
+        goals = self.sample_goal_from_state(start_states, states_goal)
+
+        return start_states, goals, first_actions
+    
     def _initial_action_proposals(
             self, state: SyncMAPFGridState, action: SyncMAPFGridAction
     ) -> Tuple[List[Tuple[int, int]], List[Tuple[int, int]]]:

@@ -250,7 +250,7 @@ class SyncMAPFGrid(
 
         steps = np.asarray(steps_gen, dtype=np.int64)
 
-        wait_id = self._get_wait_action_id()
+        wait_id = self._get_wait_actions()
         for i in np.where(steps == 0)[0]:
             index = int(i)
             next_states[index] = start_states[index]

@@ -1,3 +1,4 @@
+""" Definition of heuristic and policy neural networks and parallel functions """
 from abc import abstractmethod, ABC
 from typing import List, Any, TypeVar, Generic, cast, Tuple, Optional, Type, Protocol, runtime_checkable, Union
 
@@ -19,9 +20,14 @@ In = TypeVar('In', bound=NNetInput)
 
 
 class DeepXubeNNet(nn.Module, Generic[In], ABC):
+    """ The PyTorch module from which all modules used inherit """
     @staticmethod
     @abstractmethod
     def nnet_input_type() -> Type[In]:
+        """
+
+        :return: The type of NNetInput expected
+        """
         pass
 
     def __init__(self, nnet_input: In):
@@ -32,15 +38,30 @@ class DeepXubeNNet(nn.Module, Generic[In], ABC):
         self.lr_d: float = 0.9999993
 
     def forward(self, inputs: List[Tensor]) -> List[Tensor]:
+        """
+
+        :param inputs: List of tensors where the first dimension of each tensor is equal to the number of inputs
+        :return: List of tensors where the first dimension of each tensor is equal to the number of outputs
+        """
         if self.training:
             return self._forward_train(inputs)
         else:
             return self._forward_eval(inputs)
 
     def get_optimizer(self) -> Optimizer:
+        """
+
+        :return: The optimizer used to train the neural network
+        """
         return optim.Adam(self.parameters(), lr=self.lr)
 
     def update_optimizer(self, optimizer: Optimizer, train_itr: int) -> None:
+        """ Update the optimizer based on the current training iteration
+
+        :param optimizer: Current optimizer
+        :param train_itr: Training iteration
+        :return: None
+        """
         lr_itr: float = self.lr * (self.lr_d ** train_itr)
         for param_group in optimizer.param_groups:
             param_group['lr'] = lr_itr
@@ -76,6 +97,13 @@ class DeepXubeNNet(nn.Module, Generic[In], ABC):
 
 class HeurNNet(DeepXubeNNet[In]):
     def __init__(self, nnet_input: In, out_dim: int, q_fix: bool, **kwargs: Any):
+        """
+
+        :param nnet_input: Neural network input
+        :param out_dim: Output dimensionality. If q_fix is true, this is the dimensionality of the number of actions, must be 1 otherwise
+        :param q_fix: If true, the last element in the list of numpy arrays of the input corresponds to the index of the action
+        :param kwargs: kwargs
+        """
         super().__init__(nnet_input)
         self.out_dim: int = out_dim
         self.q_fix: bool = q_fix
@@ -188,6 +216,10 @@ class PolicyVAE(PolicyNNet[PNNetIn]):
 
     @abstractmethod
     def latent_shape(self) -> Tuple[int, ...]:
+        """
+
+        :return: Dimensions of latent
+        """
         pass
 
     @abstractmethod
@@ -225,12 +257,14 @@ class PolicyVAE(PolicyNNet[PNNetIn]):
 
 @runtime_checkable
 class HeurFnV(Protocol):
+    """ Maps states and goals to cost-to-go """
     def __call__(self, states: List[State], goals: List[Goal]) -> List[float]:
         ...
 
 
 @runtime_checkable
 class HeurFnQ(Protocol):
+    """ Maps states, goals, and actions to transitions cost plus cost-to-go of resulting state """
     def __call__(self, states: List[State], goals: List[Goal], actions_l: List[List[Action]]) -> List[List[float]]:
         ...
 
@@ -240,6 +274,7 @@ HeurFn = Union[HeurFnV, HeurFnQ]
 
 @runtime_checkable
 class PolicyFn(Protocol):
+    """ Samples actions and their corresponding log probabilities given states and goals """
     def __call__(self, states: List[State], goals: List[Goal]) -> Tuple[List[List[Action]], List[List[float]]]:
         """ Map states and goals to sampled actions along with their probability (or log probability) densities
 
@@ -296,6 +331,12 @@ class HeurNNetParV(HeurNNetPar[HeurFnV]):
 
     @abstractmethod
     def to_np(self, states: List[State], goals: List[Goal]) -> List[NDArray[Any]]:
+        """
+
+        :param states: States
+        :param goals: Goals
+        :return: Neural network representation
+        """
         pass
 
 
@@ -310,6 +351,13 @@ class HeurNNetParQ(HeurNNetPar[HeurFnQ]):
 
     @abstractmethod
     def to_np(self, states: List[State], goals: List[Goal], actions_l: List[List[Action]]) -> List[NDArray[Any]]:
+        """
+
+        :param states: States
+        :param goals: Goals
+        :param actions_l: Actions
+        :return: Neural network representation
+        """
         pass
 
 
@@ -444,10 +492,23 @@ class PolicyNNetPar(NNetPar[PolicyFn]):
 
     @abstractmethod
     def to_np_fn(self, states: List[State], goals: List[Goal]) -> List[NDArray[Any]]:
+        """ When sampling actions
+
+        :param states: States
+        :param goals: Goals
+        :return: Neural network output representing sampled actions
+        """
         pass
 
     @abstractmethod
     def to_np_train(self, states: List[State], goals: List[Goal], actions: List[Action]) -> List[NDArray[Any]]:
+        """ When training
+
+        :param states: States
+        :param goals: Goals
+        :param actions: Actions
+        :return: Output of policy network when training
+        """
         pass
 
     @abstractmethod

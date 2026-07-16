@@ -1,26 +1,26 @@
-from typing import List, Tuple, Dict, Any, Optional, Type
+from typing import List, Tuple, Optional, Type
 import numpy as np
-from matplotlib.figure import Figure
 from torch import nn, Tensor
 
-from deepxube.base.factory import Parser
+from deepxube.base.factory import DelimParser
 from deepxube.base.domain import State, Action, Goal, ActsEnumFixed, StartGoalWalkable, StateGoalVizable, StringToAct
-from deepxube.base.nnet_input import StateGoalIn, HasFlatSGActsEnumFixedIn, HasFlatSGAIn
+from deepxube.base.nnet_input import StateGoalIn, StateGoalActFixIn, StateGoalActIn, FlatIn
 from deepxube.base.heuristic import HeurNNet
-from deepxube.nnet.pytorch_models import Conv2dModel, FullyConnectedModel
-from deepxube.factories.heuristic_factory import heuristic_factory
 
+from deepxube.factories.heuristic_factory import heuristic_factory
 from deepxube.factories.domain_factory import domain_factory
 from deepxube.factories.nnet_input_factory import register_nnet_input
 
+from deepxube.nnet.pytorch_models import Conv2dModel, FullyConnectedModel
+
+from numpy.typing import NDArray
+import random
+
+from matplotlib.figure import Figure
 from matplotlib.colors import ListedColormap
 import matplotlib.pyplot as plt
-from numpy.typing import NDArray
-
-import re
 
 
-# Define states, goals, and actions
 class GridState(State):
     def __init__(self, robot_x: int, robot_y: int):
         self.robot_x: int = robot_x
@@ -54,13 +54,12 @@ class GridAction(Action):
         return NotImplemented
 
     def __repr__(self) -> str:
-        return f"{self.action}"
+        return ["UP", "DOWN", "LEFT", "RIGHT"][self.action]
 
 
 @domain_factory.register_class("grid")
 class Grid(ActsEnumFixed[GridState, GridAction, GridGoal], StartGoalWalkable[GridState, GridAction, GridGoal],
-           StateGoalVizable[GridState, GridAction, GridGoal], StringToAct[GridState, GridAction, GridGoal],
-           HasFlatSGActsEnumFixedIn[GridState, GridAction, GridGoal], HasFlatSGAIn[GridState, GridAction, GridGoal]):
+           StateGoalVizable[GridState, GridAction, GridGoal], StringToAct[GridState, GridAction, GridGoal]):
     def __init__(self, dim: int = 7):
         super().__init__()
         self.dim: int = dim
@@ -70,40 +69,24 @@ class Grid(ActsEnumFixed[GridState, GridAction, GridGoal], StartGoalWalkable[Gri
         return [(state.robot_x == goal.robot_x) and (state.robot_y == goal.robot_y) for state, goal in zip(states, goals)]
 
     def sample_start_states(self, num_states: int) -> List[GridState]:
-        return [GridState(np.random.randint(self.dim), np.random.randint(self.dim)) for _ in range(num_states)]
+        return [GridState(random.randint(0, self.dim - 1), random.randint(0, self.dim - 1)) for _ in range(num_states)]
 
     def next_state(self, states: List[GridState], actions: List[GridAction]) -> Tuple[List[GridState], List[float]]:
         states_next: List[GridState] = []
         for state, action in zip(states, actions):
-            if action.action == 0:  # up
+            if action.action == 1:  # up
                 states_next.append(GridState(min(state.robot_x + 1, self.dim - 1), state.robot_y))
-            elif action.action == 1:  # down
+            elif action.action == 0:  # down
                 states_next.append(GridState(max(state.robot_x - 1, 0), state.robot_y))
-            elif action.action == 2:  # left
+            elif action.action == 3:  # left
                 states_next.append(GridState(state.robot_x, min(state.robot_y + 1, self.dim - 1)))
-            elif action.action == 3:  # right
+            elif action.action == 2:  # right
                 states_next.append(GridState(state.robot_x, max(state.robot_y - 1, 0)))
 
         return states_next, [1.0] * len(states_next)
 
     def sample_goal_from_state(self, states_start: Optional[List[GridState]], states_goal: List[GridState]) -> List[GridGoal]:
         return [GridGoal(state_goal.robot_x, state_goal.robot_y) for state_goal in states_goal]
-
-    def get_input_info_flat_sg(self) -> Tuple[List[int], List[int]]:
-        return [4], [self.dim]
-
-    def get_input_info_flat_sga(self) -> Tuple[List[int], List[int]]:
-        return [4, 1], [self.dim, self.get_num_acts()]
-
-    def to_np_flat_sg(self, states: List[GridState], goals: List[GridGoal]) -> List[NDArray]:
-        return [np.stack([np.stack([state.robot_x for state in states]), np.stack([state.robot_y for state in states]),
-                          np.stack([goal.robot_x for goal in goals]), np.stack([goal.robot_y for goal in goals])], axis=1)]
-
-    def to_np_flat_sga(self, states: List[GridState], goals: List[GridGoal], actions: List[GridAction]) -> List[NDArray]:
-        return self.to_np_flat_sg(states, goals) + [np.expand_dims(np.array(self.actions_to_indices(actions)), 1)]
-
-    def actions_to_indices(self, actions: List[GridAction]) -> List[int]:
-        return [action_i.action for action_i in actions]
 
     def visualize_state_goal(self, state: GridState, goal: GridGoal, fig: Figure) -> None:
         ax = plt.axes()
@@ -114,13 +97,13 @@ class Grid(ActsEnumFixed[GridState, GridAction, GridGoal], StartGoalWalkable[Gri
         fig.add_axes(ax)
 
     def string_to_action(self, act_str: str) -> Optional[GridAction]:
-        if act_str in {"0", "1", "2", "3"}:
-            return GridAction(int(act_str))
+        if act_str in {"w", "s", "a", "d"}:
+            return GridAction(["w", "s", "a", "d"].index(act_str))
         else:
             return None
 
     def string_to_action_help(self) -> str:
-        return "0, 1, 2, or 3 for down, up, right, and left, respectively."
+        return "w, s, a, or d for up, down, left, and right, respectively."
 
     def get_actions_fixed(self) -> List[GridAction]:
         return self.actions_fixed.copy()
@@ -130,12 +113,46 @@ class Grid(ActsEnumFixed[GridState, GridAction, GridGoal], StartGoalWalkable[Gri
 
 
 @domain_factory.register_parser("grid")
-class GridParser(Parser):
-    def parse(self, args_str: str) -> Dict[str, Any]:
-        return {"dim": int(args_str)}
+class GridParser(DelimParser):
+    def __init__(self) -> None:
+        super().__init__()
+        self.add_argument("d", "dim", int, "dimensionality of grid")
 
-    def help(self) -> str:
-        return "An integer for the dimension. E.g. 'grid.7'"
+    @property
+    def delim(self) -> str:
+        return "_"
+
+
+@register_nnet_input("grid", "grid_flat_in")
+class GridFlatIn(StateGoalIn[Grid, GridState, GridGoal], FlatIn[Grid]):
+    def get_input_info(self) -> Tuple[List[int], List[int]]:
+        return [4], [self.domain.dim]
+
+    def to_np(self, states: List[GridState], goals: List[GridGoal]) -> List[NDArray]:
+        return [np.stack([np.stack([state.robot_x for state in states]), np.stack([state.robot_y for state in states]),
+                          np.stack([goal.robot_x for goal in goals]), np.stack([goal.robot_y for goal in goals])], axis=1)]
+
+
+@register_nnet_input("grid", "grid_flat_in_qfix")
+class GridFlatInQFix(StateGoalActFixIn[Grid, GridState, GridGoal, GridAction], FlatIn[Grid]):
+    def get_input_info(self) -> Tuple[List[int], List[int]]:
+        return [4], [self.domain.dim]
+
+    def to_np(self, states: List[GridState], goals: List[GridGoal], actions_l: List[List[GridAction]]) -> List[NDArray]:
+        actions_np: NDArray = np.array([[action_i.action for action_i in actions] for actions in actions_l])
+        return [np.stack([np.stack([state.robot_x for state in states]), np.stack([state.robot_y for state in states]),
+                          np.stack([goal.robot_x for goal in goals]), np.stack([goal.robot_y for goal in goals])], axis=1)] + [actions_np]
+
+
+@register_nnet_input("grid", "grid_flat_in_actin")
+class GridFlatInActIn(StateGoalActIn[Grid, GridState, GridGoal, GridAction], FlatIn[Grid]):
+    def get_input_info(self) -> Tuple[List[int], List[int]]:
+        return [4, 1], [self.domain.dim, self.domain.get_num_acts()]
+
+    def to_np(self, states: List[GridState], goals: List[GridGoal], actions: List[GridAction]) -> List[NDArray]:
+        actions_np: NDArray = np.expand_dims(np.array([action_i.action for action_i in actions]), 1)
+        return [np.stack([np.stack([state.robot_x for state in states]), np.stack([state.robot_y for state in states]),
+                          np.stack([goal.robot_x for goal in goals]), np.stack([goal.robot_y for goal in goals])], axis=1)] + [actions_np]
 
 
 @register_nnet_input("grid", "grid_nnet_input")
@@ -177,22 +194,12 @@ class GridNet(HeurNNet[GridNNetInput]):
 
 
 @heuristic_factory.register_parser("gridnet")
-class GridNetParser(Parser):
-    def parse(self, args_str: str) -> Dict[str, Any]:
-        args_str_l: List[str] = args_str.split("_")
-        kwargs: Dict[str, Any] = dict()
-        for args_str_i in args_str_l:
-            channel_re = re.search(r"^(\S+)CH$", args_str_i)
-            fc_re = re.search(r"^(\S+)FC$", args_str_i)
-            if channel_re is not None:
-                kwargs["chan_size"] = int(channel_re.group(1))
-            elif fc_re is not None:
-                kwargs["fc_size"] = int(fc_re.group(1))
-            else:
-                raise ValueError(f"Unexpected argument {args_str_i!r}")
-        return kwargs
+class GridNetParser(DelimParser):
+    def __init__(self) -> None:
+        super().__init__()
+        self.add_argument("ch", "chan_size", int, "number of channels")
+        self.add_argument("fc", "fc_size", int, "size of fully connected layer")
 
-    def help(self) -> str:
-        return ("Arguments are delimited by '_' and can be in any order.\n<num>C (number of channels), "
-                "<num>FC (width of fully-connected layer), bn (batch_norm), wn (weight_norm).\n"
-                "E.g. gridnet.10CH_200FC")
+    @property
+    def delim(self) -> str:
+        return "_"

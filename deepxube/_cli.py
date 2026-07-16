@@ -6,6 +6,7 @@ from deepxube._train_cli import parser_train
 from deepxube._solve import parse_solve
 from deepxube.base.factory import Parser
 from deepxube.base.domain import Domain, StateGoalVizable, StringToAct, State, Action, Goal
+from deepxube.base.nnet_input import NNetInput
 from deepxube.base.heuristic import HeurNNet, HeurNNetPar, PolicyNNetPar
 from deepxube.base.pathfinding import PathFind
 from deepxube.factories.domain_factory import domain_factory
@@ -20,6 +21,7 @@ import matplotlib.pyplot as plt
 from matplotlib.axes import Axes
 from matplotlib.widgets import Slider
 from matplotlib.figure import Figure
+from PIL import Image
 import pickle
 import textwrap
 import numpy as np
@@ -44,74 +46,87 @@ def get_immediate_mixins(cls: Type[object], mixin_base: Type) -> List[Type]:
 
 
 def domain_info(args: argparse.Namespace) -> None:
-    domain_names: List[str]
-    if args.names is None:
-        domain_names = domain_factory.get_all_class_names()
+    domain_name: str
+    domain_t: Type[Domain]
+    if args.domain is None:
+        domain_names: List[str] = domain_factory.get_all_class_names()
+        for domain_name in domain_names:
+            domain_t = domain_factory.get_type(domain_name)
+            print(f"Domain (Name, Module, Class): {domain_name}, {domain_t.__module__}, {domain_t.__qualname__}")
     else:
-        domain_names = args.names.split(",")
+        domain_name = args.domain
 
-    for domain_name in domain_names:
-        domain_t: Type[Domain] = domain_factory.get_type(domain_name)
-        print(f"Domain: {domain_name}, {domain_t}")
+        domain_t = domain_factory.get_type(domain_name)
+        print(f"Domain (Name, Module, Class): {domain_name}, {domain_t.__module__}, {domain_t.__qualname__}")
         parser: Optional[Parser] = domain_factory.get_parser(domain_name)
         if parser is not None:
-            print(textwrap.indent("Parser: " + parser.help(), '\t'))
+            print("Parser help:\n" + textwrap.indent(parser.help(), '\t'), '\t')
 
         # mixins
-        mixin_str: str = ', '.join([f"{x}" for x in get_immediate_mixins(domain_t, Domain)])
-        print(textwrap.indent(f"Mixins: {mixin_str}", '\t'))
+        mixin_str: str = textwrap.indent(', '.join([f"{x.__qualname__}" for x in get_immediate_mixins(domain_t, Domain)]), '\t')
+        print("Mixins:\n" + mixin_str, '\t')
 
         # nnet inputs
         nnet_input_t_keys: List[Tuple[str, str]] = get_domain_nnet_input_keys(domain_name)
-        print(textwrap.indent("NNet Inputs:", '\t'))
+        print("NNet Inputs (Name, Module, Class):")
         for nnet_input_t_key in nnet_input_t_keys:
-            print(textwrap.indent(f"Name: {nnet_input_t_key[1]}, Type: {get_nnet_input_t(nnet_input_t_key)}", '\t\t'))
+            nnet_input_t: Type[NNetInput] = get_nnet_input_t(nnet_input_t_key)
+            print(textwrap.indent(f"{nnet_input_t_key[1]}, {nnet_input_t.__module__}, {nnet_input_t.__qualname__}", '\t'))
 
         # pathfinding
         pathfind_names: List[str] = get_domain_compat_pathfind_names(domain_t)
-        print(textwrap.indent("Pathfinding:", '\t'))
+        print("Pathfinding (Name, Module, Class):")
         for pathfind_name in pathfind_names:
-            print(textwrap.indent(f"Name: {pathfind_name}, Type: {pathfinding_factory.get_type(pathfind_name)}", '\t\t'))
+            pathfind_t: Type[PathFind] = pathfinding_factory.get_type(pathfind_name)
+            print(textwrap.indent(f"{pathfind_name}, {pathfind_t.__module__}, {pathfind_t.__qualname__}", '\t'))
         print("")
 
 
 def heur_info(args: argparse.Namespace) -> None:
-    heur_nnet_names: List[str]
-    if args.names is None:
-        heur_nnet_names = heuristic_factory.get_all_class_names()
+    heur_nnet_name: str
+    heur_nnet_t: Type[HeurNNet]
+    if args.name is None:
+        heur_nnet_names: List[str] = heuristic_factory.get_all_class_names()
+        for heur_nnet_name in heur_nnet_names:
+            heur_nnet_t = heuristic_factory.get_type(heur_nnet_name)
+            print(f"Heur NNet (Name, Module, Class): {heur_nnet_name}, {heur_nnet_t.__module__}, {heur_nnet_t.__qualname__}")
     else:
-        heur_nnet_names = args.names.split(",")
-
-    for heur_nnet_name in heur_nnet_names:
-        heur_nnet_t: Type[HeurNNet] = heuristic_factory.get_type(heur_nnet_name)
-        print(f"Heur NNet: {heur_nnet_name}, {heur_nnet_t}")
-        print(textwrap.indent(f"NNet_Input type expected: {heur_nnet_t.nnet_input_type()}", '\t'))
+        heur_nnet_name = args.name
+        heur_nnet_t = heuristic_factory.get_type(heur_nnet_name)
+        print(f"Heur NNet (Name, Module, Class): {heur_nnet_name}, {heur_nnet_t.__module__}, {heur_nnet_t.__qualname__}")
+        nnet_input_t: Type[NNetInput] = heur_nnet_t.nnet_input_type()
+        print(f"NNet_Input type expected (Module, Class): {nnet_input_t.__module__}, {nnet_input_t.__qualname__}")
         parser: Optional[Parser] = heuristic_factory.get_parser(heur_nnet_name)
         if parser is not None:
-            print(textwrap.indent("Parser: " + parser.help(), '\t'))
-        print("")
+            print("Parser help:\n" + textwrap.indent(parser.help(), '\t'))
 
 
 def pathfinding_info(args: argparse.Namespace) -> None:
-    names: List[str]
-    if args.names is None:
-        names = pathfinding_factory.get_all_class_names()
+    name: str
+    pathfind_t: Type[PathFind]
+    if args.name is None:
+        names: List[str] = pathfinding_factory.get_all_class_names()
+        for name in names:
+            pathfind_t = pathfinding_factory.get_type(name)
+            print(f"PathFind (Name, Module, Class): {name}, {pathfind_t.__module__}, {pathfind_t.__qualname__}")
     else:
-        names = args.names.split(",")
-
-    for name in names:
-        pathfind_t: Type[PathFind] = pathfinding_factory.get_type(name)
-        print(f"PathFind: {name}, {pathfind_t}")
-        mixin_str: str = ', '.join([f"{x}" for x in get_immediate_mixins(pathfind_t, PathFind)])
-        print(textwrap.indent(f"Mixins: {mixin_str}", '\t'))
-
-        print(textwrap.indent(f"Domain type expected: {pathfind_t.domain_type()}", '\t'))
-        print(textwrap.indent(f"Functions type expected: {pathfind_t.functions_type()}", '\t'))
+        name = args.name
+        pathfind_t = pathfinding_factory.get_type(name)
+        print(f"PathFind (Name, Module, Class): {name}, {pathfind_t.__module__}, {pathfind_t.__qualname__}")
+        mixin_str: str = ', '.join([f"{x.__qualname__}" for x in get_immediate_mixins(pathfind_t, PathFind)])
+        print(f"Mixins: {mixin_str}", '\t')
+        print(f"Domain type expected: {pathfind_t.domain_type().__qualname__}", '\t')
+        print(f"Functions type expected: {pathfind_t.functions_type().__qualname__}", '\t')
 
         parser: Optional[Parser] = pathfinding_factory.get_parser(name)
         if parser is not None:
-            print(textwrap.indent("Parser: " + parser.help(), '\t'))
-        print("")
+            print("Parser help:\n" + textwrap.indent(parser.help(), '\t'))
+
+
+def fig_to_rgba(fig: Figure) -> NDArray:
+    fig.canvas.draw()
+    rgba: NDArray = np.asarray(fig.canvas.buffer_rgba())
+    return rgba
 
 
 def viz_step(domain: StateGoalVizable, data: Dict, idx: int, state_idx: int, state_idx_max: int, states_on_path: List[State], state: State, goal: Goal,
@@ -167,66 +182,82 @@ def viz(args: argparse.Namespace) -> None:
         if states_on_path is not None:
             state_idx: int = 0
             state_idx_max: int = len(states_on_path) - 1
-            plt.show(block=False)
-            while True:
-                act_str = input(f"State idx {state_idx} of {state_idx_max} on path. Next state (n), Previous state (p), Video (v), state idx: ")
-                if len(act_str) == 0:
-                    break
-                if act_str.upper() == "N":
-                    if state_idx < state_idx_max:
-                        state, state_idx = viz_step(domain, data, args.idx, state_idx, state_idx_max, states_on_path, state, goal, args.no_act, fig)
-                elif act_str.upper() == "V":
-                    while state_idx < state_idx_max:
-                        state, state_idx = viz_step(domain, data, args.idx, state_idx, state_idx_max, states_on_path, state, goal, args.no_act, fig)
-                        plt.pause(float(args.v_time))
-                elif act_str.upper() == "P":
-                    if state_idx > 0:
-                        state_idx -= 1
+            if args.o is not None:
+                rgba_l: List = []
+                while state_idx < state_idx_max:
+                    rgba_l.append(fig_to_rgba(fig).copy())
+                    state, state_idx = viz_step(domain, data, args.idx, state_idx, state_idx_max, states_on_path, state, goal, args.no_act, fig)
+                rgba_l.append(fig_to_rgba(fig).copy())
+
+                frames: List[Image.Image] = [Image.fromarray(rgba, mode="RGBA") for rgba in rgba_l]
+                frames[0].save(args.o, save_all=True, append_images=frames[1:], duration=1000 * args.v_time, loop=0)
+            else:
+                plt.show(block=False)
+                while True:
+                    act_str = input(f"State idx {state_idx} of {state_idx_max} on path. Next state (n), Previous state (p), Video (v), state idx, "
+                                    f"'!' to quit: ")
+                    if act_str == "!":
+                        break
+                    if act_str.upper() == "N":
+                        if state_idx < state_idx_max:
+                            state, state_idx = viz_step(domain, data, args.idx, state_idx, state_idx_max, states_on_path, state, goal, args.no_act, fig)
+                    elif act_str.upper() == "V":
+                        while state_idx < state_idx_max:
+                            state, state_idx = viz_step(domain, data, args.idx, state_idx, state_idx_max, states_on_path, state, goal, args.no_act, fig)
+                            plt.pause(float(args.v_time))
+                    elif act_str.upper() == "P":
+                        if state_idx > 0:
+                            state_idx -= 1
+                            state = states_on_path[state_idx]
+                            _viz_state_goal_update(domain, state, goal, fig)
+
+                            print(f"Goal Reached: {domain.is_solved([state], [goal])[0]}")
+                    else:
+                        state_idx = int(act_str)
+                        assert state_idx >= 0
                         state = states_on_path[state_idx]
                         _viz_state_goal_update(domain, state, goal, fig)
-
                         print(f"Goal Reached: {domain.is_solved([state], [goal])[0]}")
-                else:
-                    state_idx = int(act_str)
-                    assert state_idx >= 0
-                    state = states_on_path[state_idx]
-                    _viz_state_goal_update(domain, state, goal, fig)
-                    print(f"Goal Reached: {domain.is_solved([state], [goal])[0]}")
         else:
             input("No path (press enter to quit): ")
     else:
         if isinstance(domain, StringToAct):
             print(domain.string_to_action_help())
-        plt.show(block=False)
-        while True:
-            # get input
-            input_options: List[str] = ["nothing for random action"]
-            if isinstance(domain, StringToAct):
-                input_options.append("action string")
-            input_options.append("'!' to quit")
-            input_str = f"Enter {'; or '.join(input_options)}: "
+        if args.o is not None:
+            rgba: NDArray = fig_to_rgba(fig)
+            img = Image.fromarray(rgba, mode="RGBA")
+            img.save(args.o)
+        else:
+            plt.show(block=False)
+            while True:
+                # get input
+                input_options: List[str] = ["nothing for random action"]
+                if isinstance(domain, StringToAct):
+                    input_options.append("action string")
+                input_options.append("'!' to quit")
+                input_str = f"Enter {'; or '.join(input_options)}: "
 
-            act_str = input(input_str)
-            if act_str == "!":
-                break
+                act_str = input(input_str)
+                if act_str == "!":
+                    break
 
-            # get action
-            action_op: Optional[Action] = None
-            if len(act_str) == 0:
-                action_op = domain.sample_state_action([state])[0]
-            elif isinstance(domain, StringToAct):
-                action_op = domain.string_to_action(act_str)
+                # get action
+                action_op: Optional[Action] = None
+                if len(act_str) == 0:
+                    action_op = domain.sample_state_action([state])[0]
+                elif isinstance(domain, StringToAct):
+                    action_op = domain.string_to_action(act_str)
 
-            # take action
-            if action_op is None:
-                print(f"No action '{act_str}'")
-            else:
-                print(action_op)
-                states_next, tcs = domain.next_state([state], [action_op])
-                state = states_next[0]
-                print(f"Transition cost: {tcs[0]}")
-                print(f"Goal Reached: {domain.is_solved([state], [goal])[0]}")
-                _viz_state_goal_update(domain, state, goal, fig)
+                # take action
+                if action_op is None:
+                    print(f"No action '{act_str}'")
+                else:
+                    print(action_op)
+                    states_next, tcs = domain.next_state([state], [action_op])
+                    state = states_next[0]
+                    print(f"Transition cost: {tcs[0]}")
+                    print(f"Goal Reached: {domain.is_solved([state], [goal])[0]}")
+                    _viz_state_goal_update(domain, state, goal, fig)
 
 
 def _viz_state_goal_update(domain: StateGoalVizable, state: State, goal: Goal, fig: Figure) -> None:
@@ -293,9 +324,20 @@ def train_summary(args: argparse.Namespace) -> None:
         plot_itr_data(axs, step_slider, itr, itr_to_in_out, itr_to_steps_to_pathfindperf)
         fig.canvas.draw()
 
-    step_slider.on_changed(update)
     fig.tight_layout()
-    plt.show()
+
+    if args.o is not None:
+        rgba_l: List = []
+        for idx_gif in range(len(itrs)):
+            step_slider.set_val(idx_gif)
+            update(idx_gif)
+            rgba_l.append(fig_to_rgba(fig).copy())
+
+        frames: List[Image.Image] = [Image.fromarray(rgba, mode="RGBA") for rgba in rgba_l]
+        frames[0].save(args.o, save_all=True, append_images=frames[1:], duration=1000 * args.v_time, loop=0)
+    else:
+        step_slider.on_changed(update)
+        plt.show()
 
 
 def problem_inst_gen(args: argparse.Namespace) -> None:
@@ -381,17 +423,17 @@ def main() -> None:
 
 
 def _parser_domain_info(parser: ArgumentParser) -> None:
-    parser.add_argument('--names', type=str, default=None, help="Comma separated value for only specific names. List all if None.")
+    parser.add_argument('--domain', '--name', type=str, default=None, help="Name of domain.")
     parser.set_defaults(func=domain_info)
 
 
 def _parser_heur_info(parser: ArgumentParser) -> None:
-    parser.add_argument('--names', type=str, default=None, help="Comma separated value for only specific names. List all if None.")
+    parser.add_argument('--name', type=str, default=None, help="Name of heuristic.")
     parser.set_defaults(func=heur_info)
 
 
 def _parser_pathfind_info(parser: ArgumentParser) -> None:
-    parser.add_argument('--names', type=str, default=None, help="Comma separated value for only specific names. List all if None.")
+    parser.add_argument('--name', type=str, default=None, help="Name of pathfinding method.")
     parser.set_defaults(func=pathfinding_info)
 
 
@@ -400,11 +442,12 @@ def _parse_viz_info(parser: ArgumentParser) -> None:
     parser.add_argument('--steps', type=int, default=0, help="Number of steps to take to generate problem instnace.")
     parser.add_argument('--file', type=str, default=None, help="If given, visualize results from file.")
     parser.add_argument('--idx', type=int, default=0, help="Index of problem instance in file.")
-    parser.add_argument('--v_time', type=float, default=0.1, help="Pause time for each step when showing video.")
+    parser.add_argument('--v_time', type=float, default=0.5, help="Pause time for each step when showing video or gif (in seconds).")
     parser.add_argument('--soln', action='store_true', default=False, help="If true, then assumes file contains solutions for problem instances and will "
                                                                            "visualize them.")
     parser.add_argument('--no_act', action='store_true', default=False, help="If true, then will not take action in domain when stepping through solution to "
                                                                              "verify states match and will just use states on solution path.")
+    parser.add_argument('--o', type=str, default=None, help="Output file. Extension should be .png for single image and .gif for solution.")
     parser.set_defaults(func=viz)
 
 
@@ -433,4 +476,6 @@ def _parse_problem_instance(parser: ArgumentParser) -> None:
 def _parse_train_summary(parser: ArgumentParser) -> None:
     parser.add_argument('--dir', type=str, required=True, help="Training directory.")
     parser.add_argument('--type', type=str, default="heur", help="heur or policy")
+    parser.add_argument('--v_time', type=float, default=0.5, help="Pause time for each step when making gif (in seconds).")
+    parser.add_argument('--o', type=str, default=None, help="Output file. Extensrion should be .gif.")
     parser.set_defaults(func=train_summary)

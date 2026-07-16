@@ -1,6 +1,9 @@
 # Changes
 
-## 0.2.2
+## 0.3.1
+* Save .gif file of train_summary option
+
+## 0.3.0
 * Optimizer creation and update during training now part of DeepXubeNNet class. Methods can be overridden for different behavior.
 * step_min argument added to deepxube time
 * Added ReLU2 activation function
@@ -34,6 +37,7 @@
 * Add --no_act option to viz
 * mean(std/min/max) for itrs and path_costs in --up_v
 * Make training more generic for DeepXubeNNet to allow more user flexibility
+* Add gradient accumulation
 
 ## 0.2.1
 * Consolidate search: Beam search -> special cases: greedy_policy, graph search -> special cases: batch weighted A* search, batch weighted Q* search 
